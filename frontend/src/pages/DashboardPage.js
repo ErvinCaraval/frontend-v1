@@ -12,6 +12,7 @@ export default function DashboardPage() {
   const [publicGames, setPublicGames] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showAIGenerator, setShowAIGenerator] = useState(false);
+  const [selectedTopic, setSelectedTopic] = useState('');
 
   useEffect(() => {
     fetchPublicGames();
@@ -30,20 +31,29 @@ export default function DashboardPage() {
     }
   };
 
-  const handleCreateGame = () => {
+  const handleCreateGame = async () => {
+    if (!selectedTopic) {
+      alert('Por favor selecciona un tema antes de crear la partida.');
+      return;
+    }
     setLoading(true);
     socket.connect();
+    // Obtener el token de autenticación del usuario
+    let token = null;
+    if (user && user.getIdToken) {
+      token = await user.getIdToken();
+    }
     socket.emit('createGame', {
       hostId: user.uid,
       displayName: user.displayName || user.email,
-      isPublic: true
+      isPublic: true,
+      token,
+      topic: selectedTopic
     });
-    
     socket.on('gameCreated', ({ gameId }) => {
       setLoading(false);
       navigate(`/lobby/${gameId}`);
     });
-    
     socket.on('error', ({ error }) => {
       setLoading(false);
       alert('Error creating game: ' + error);
@@ -64,8 +74,12 @@ export default function DashboardPage() {
 
   const handleQuestionsGenerated = (questions) => {
     console.log('Preguntas generadas:', questions);
-    // Aquí podrías guardar las preguntas o usarlas para crear un juego
-    alert(`¡Se generaron ${questions.length} preguntas!`);
+    // Bloquear el cambio de tema y usar el último tema generado
+    if (questions && questions.length > 0 && questions[0].category) {
+      setSelectedTopic(questions[0].category);
+    }
+    // Opcional: podrías mostrar el tema generado en la UI para confirmación
+    alert(`¡Se generaron ${questions.length} preguntas! Tema seleccionado: ${questions[0]?.category || ''}`);
   };
 
   return (
@@ -90,19 +104,24 @@ export default function DashboardPage() {
             <h3>🎮 Crear nueva partida</h3>
             <p>Inicia una partida y invita a tus amigos</p>
             <div className="create-game-actions">
-              <button 
-                onClick={handleCreateGame} 
+              <button
+                onClick={handleCreateGame}
                 className="btn btn-primary btn-large"
                 disabled={loading}
+                title="Primero genera preguntas con IA para que tu partida tenga contenido."
               >
                 {loading ? 'Creando...' : 'Crear partida'}
               </button>
               <button 
                 onClick={() => setShowAIGenerator(true)} 
                 className="btn btn-ai btn-large"
+                title="Genera preguntas personalizadas con IA antes de crear tu partida."
               >
                 🤖 Generar preguntas con IA
               </button>
+              <div style={{marginTop: 8, color: '#555', fontSize: 14}}>
+                <strong>Ayuda:</strong> Antes de crear una partida, genera tus propias preguntas con IA. Así tu juego tendrá contenido personalizado y reciente.
+              </div>
             </div>
           </div>
 

@@ -8,6 +8,7 @@ import Ranking from '../components/Ranking';
 import './GamePage.css';
 
 export default function GamePage() {
+  const [questionTimeout, setQuestionTimeout] = useState(false);
   const { gameId } = useParams();
   const { user } = useAuth();
   const [question, setQuestion] = useState(null);
@@ -22,10 +23,16 @@ export default function GamePage() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Si no llega pregunta en 5 segundos, mostrar error
+    const timeout = setTimeout(() => {
+      if (!question) setQuestionTimeout(true);
+    }, 5000);
+
     if (!user) return;
     socket.connect();
     
     socket.on('newQuestion', ({ question, index }) => {
+      console.log('Pregunta recibida:', question);
       setQuestion(question);
       setQuestionIndex(index);
       setSelected(null);
@@ -118,33 +125,21 @@ export default function GamePage() {
         {question && (
           <div className="question-container">
             <div className="question-header">
-              <h3 className="question-text">{question.text}</h3>
+              <Question
+                question={question.question}
+                options={question.options}
+                onSelect={handleSelect}
+                selected={selected}
+              />
               {!showResult && (
-                <Timer 
-                  key={timerKey} 
-                  seconds={10} 
+                <Timer
+                  key={timerKey}
+                  seconds={10}
                   onEnd={handleTimerEnd}
                   onTick={setTimeLeft}
                 />
               )}
             </div>
-
-            <div className="options-container">
-              {question.options.map((option, index) => (
-                <button
-                  key={index}
-                  className={`option-btn ${getOptionColor(index)}`}
-                  onClick={() => handleSelect(index)}
-                  disabled={selected !== null}
-                >
-                  <span className="option-letter">
-                    {String.fromCharCode(65 + index)}
-                  </span>
-                  <span className="option-text">{option}</span>
-                </button>
-              ))}
-            </div>
-
             {showResult && result && (
               <div className="result-container">
                 <div className="result-header">
@@ -163,10 +158,16 @@ export default function GamePage() {
           </div>
         )}
 
-        {!question && (
+        {!question && !questionTimeout && (
           <div className="waiting-container">
             <div className="loading-spinner"></div>
             <p>Waiting for next question...</p>
+          </div>
+        )}
+        {!question && questionTimeout && (
+          <div className="waiting-container">
+            <div className="loading-spinner"></div>
+            <p style={{color: 'red', fontWeight: 'bold'}}>No se encontraron preguntas para este tema. Verifica que hayas generado preguntas y que el tema coincida exactamente.</p>
           </div>
         )}
       </main>

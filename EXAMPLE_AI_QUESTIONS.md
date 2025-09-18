@@ -188,3 +188,4 @@ El sistema está completamente funcional y listo para generar preguntas sobre cu
 - **API de Generación**: http://localhost:5000/api/ai/generate-questions
 - **Documentación**: `AI_QUESTIONS_GUIDE.md`
 
+

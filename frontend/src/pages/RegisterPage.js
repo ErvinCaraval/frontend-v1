@@ -8,7 +8,6 @@ import './AuthPage.css';
 export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -18,14 +17,8 @@ export default function RegisterPage() {
     setError('');
     setLoading(true);
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      await updateProfile(userCredential.user, { displayName });
-      await setDoc(doc(db, 'users', userCredential.user.uid), {
-        email,
-        displayName,
-        stats: { gamesPlayed: 0, wins: 0, correctAnswers: 0 }
-      });
-      navigate('/dashboard');
+      await createUserWithEmailAndPassword(auth, email, password);
+      navigate('/complete-profile');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -45,17 +38,6 @@ export default function RegisterPage() {
         <form onSubmit={handleRegister} className="auth-form">
           <div className="input-group">
             <input 
-              type="text" 
-              placeholder="Nombre para mostrar" 
-              value={displayName} 
-              onChange={e => setDisplayName(e.target.value)} 
-              required 
-              disabled={loading}
-            />
-          </div>
-
-          <div className="input-group">
-            <input 
               type="email" 
               placeholder="Correo electrónico" 
               value={email} 
@@ -64,7 +46,6 @@ export default function RegisterPage() {
               disabled={loading}
             />
           </div>
-          
           <div className="input-group">
             <input 
               type="password" 
@@ -75,13 +56,11 @@ export default function RegisterPage() {
               disabled={loading}
             />
           </div>
-
           {error && (
             <div className="error-message">
               {error}
             </div>
           )}
-
           <button type="submit" className="btn btn-primary btn-large" disabled={loading}>
             {loading ? 'Creando cuenta...' : 'Crear cuenta'}
           </button>

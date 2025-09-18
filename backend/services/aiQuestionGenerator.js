@@ -40,6 +40,7 @@ class AIQuestionGenerator {
   async generateQuestions(topic, difficulty = 'medium', count = 5) {
     try {
       const prompt = this.buildPrompt(topic, difficulty, count);
+      let questions = [];
 
       // Preferir Groq si hay API key
       if (this.groqApiKey) {
@@ -59,13 +60,11 @@ class AIQuestionGenerator {
         });
         const content = response.data.choices?.[0]?.message?.content || '';
         const parsed = this.extractJson(content);
-        if (parsed && parsed.questions) return parsed;
-        // fallback a local si no se pudo parsear
-        return this.generateLocalQuestions(topic, difficulty, count);
-      }
-
-      // Respaldo: OpenAI si está disponible
-      if (this.openAiApiKey) {
+        if (parsed && parsed.questions) {
+          questions = parsed.questions;
+        }
+      } else if (this.openAiApiKey) {
+        // Respaldo: OpenAI si está disponible
         const response = await axios.post(this.openAiURL, {
           model: this.openAiModel,
           messages: [
@@ -82,42 +81,52 @@ class AIQuestionGenerator {
         });
         const content = response.data.choices?.[0]?.message?.content || '';
         const parsed = this.extractJson(content);
-        if (parsed && parsed.questions) return parsed;
-        return this.generateLocalQuestions(topic, difficulty, count);
+        if (parsed && parsed.questions) {
+          questions = parsed.questions;
+        }
       }
 
-      // Si no hay proveedores, usar generador gratuito local
-      return this.generateLocalQuestions(topic, difficulty, count);
+      // Si no hay preguntas IA, devolver error (nunca usar plantillas locales)
+      if (!questions || questions.length === 0) {
+        throw new Error('No se pudieron generar preguntas con IA.');
+      }
+
+      // Filtrar preguntas repetidas (por texto)
+      const uniqueQuestions = [];
+      const seen = new Set();
+      for (const q of questions) {
+        const key = q.text && q.text.trim().toLowerCase();
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          uniqueQuestions.push(q);
+        }
+      }
+
+      // Si aún faltan preguntas, devolver error
+      if (uniqueQuestions.length < count) {
+        throw new Error('La IA no generó suficientes preguntas únicas.');
+      }
+
+      return { questions: uniqueQuestions.slice(0, count) };
     } catch (error) {
       console.error('Error generando preguntas con IA:', error.message);
-      return this.getFallbackQuestions(topic, difficulty, count);
+      throw error;
     }
   }
 
   // Generar preguntas usando una API gratuita alternativa
   async generateQuestionsFree(topic, difficulty = 'medium', count = 5) {
     try {
-      // Usar una API gratuita como QuizAPI o crear preguntas locales
-      const questions = this.generateLocalQuestions(topic, difficulty, count);
-      return questions;
+      throw new Error('No se pueden generar preguntas locales.');
     } catch (error) {
       console.error('Error generando preguntas gratuitas:', error.message);
-      return this.getFallbackQuestions(topic, difficulty, count);
+        throw new Error('No se pueden generar preguntas con IA.');
     }
   }
 
   // Generar preguntas locales usando templates
   generateLocalQuestions(topic, difficulty, count) {
-    const templates = this.getQuestionTemplates(topic);
-    const questions = [];
-
-    for (let i = 0; i < count; i++) {
-      const template = templates[Math.floor(Math.random() * templates.length)];
-      const question = this.fillTemplate(template, topic, difficulty);
-      questions.push(question);
-    }
-
-    return { questions };
+    throw new Error('No se pueden generar preguntas locales.');
   }
 
   // Templates de preguntas por tema
@@ -240,20 +249,7 @@ Responde solo con el JSON, sin texto adicional.`;
 
   // Preguntas de respaldo si falla la IA
   getFallbackQuestions(topic, difficulty, count) {
-    const fallbackQuestions = [
-      {
-        id: `fallback_${Date.now()}_1`,
-        text: `¿Cuál es la capital de ${topic}?`,
-        options: ['Opción A', 'Opción B', 'Opción C', 'Opción D'],
-        correctAnswerIndex: 0,
-        category: topic,
-        difficulty: difficulty,
-        explanation: 'Esta es una pregunta de respaldo generada localmente.',
-        source: 'Fallback'
-      }
-    ];
-
-    return { questions: fallbackQuestions.slice(0, count) };
+    throw new Error('No se pueden generar preguntas de respaldo.');
   }
 
   // Obtener temas disponibles

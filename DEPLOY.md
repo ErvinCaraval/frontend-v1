@@ -95,3 +95,4 @@ El backend usará automáticamente memoria si Firebase no está disponible.
 - Frontend: `https://brainblitz.vercel.app`
 - Backend: `https://brainblitz-backend.railway.app`
 - API: `https://brainblitz-backend.railway.app/api/ai/topics`
+

@@ -14,19 +14,22 @@ class AIController {
         return res.status(400).json({ error: 'El tema es requerido' });
       }
 
-      let questions;
-      if (useAI) {
-        questions = await this.aiGenerator.generateQuestions(topic, difficulty, count);
-      } else {
-        questions = await this.aiGenerator.generateQuestionsFree(topic, difficulty, count);
+      // Solo permitir preguntas IA, nunca plantillas locales
+      if (!useAI) {
+        return res.status(400).json({ error: 'Debes activar el modo IA para generar preguntas. No se permiten preguntas locales.' });
+      }
+
+      const result = await this.aiGenerator.generateQuestions(topic, difficulty, count);
+      if (!result.questions || !Array.isArray(result.questions) || result.questions.length < count) {
+        return res.status(500).json({ error: 'No se pudieron generar suficientes preguntas con IA. Intenta de nuevo o revisa tu API Key.' });
       }
 
       res.json({
         success: true,
         topic,
         difficulty,
-        count: questions.questions.length,
-        questions: questions.questions
+        count: result.questions.length,
+        questions: result.questions
       });
     } catch (error) {
       console.error('Error generando preguntas:', error);

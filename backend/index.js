@@ -36,20 +36,67 @@ io.on('connection', (socket) => {
   // Create Game
   socket.on('createGame', async (options) => {
     try {
+      // Log del token recibido
+      console.log('Token recibido en createGame:', options.token);
+      // Validar el token de autenticación
+      if (!options.token) {
+        socket.emit('error', { error: 'Missing authentication token' });
+        return;
+      }
+      let decodedToken;
+      try {
+        decodedToken = await require('./firebase').auth.verifyIdToken(options.token);
+      } catch (err) {
+        console.error('Error verificando token:', err);
+        socket.emit('error', { error: 'Invalid authentication token: ' + err.message });
+        return;
+      }
+      // Validar que el uid del token coincida con el hostId
+      if (decodedToken.uid !== options.hostId) {
+        socket.emit('error', { error: 'Token UID does not match hostId' });
+        return;
+      }
       // Generate a 6-digit game code
       const gameCode = Math.floor(100000 + Math.random() * 900000).toString();
+      // Buscar preguntas solo por tema y dificultad, sin filtrar por usuario ni tiempo
+      let questionsQuery = db.collection('questions')
+        .where('category', '==', options.topic || '')
+        .where('difficulty', '==', options.difficulty || 'medium');
+      questionsQuery = questionsQuery.orderBy('createdAt', 'desc');
+      const questionsSnap = await questionsQuery.get();
+      let questions = questionsSnap.docs.map(doc => doc.data());
+      // Tomar solo la cantidad pedida
+      if (options.count && questions.length > options.count) {
+        questions = questions.slice(0, options.count);
+      }
+      // Validar que haya suficientes preguntas
+      if (!questions.length || (options.count && questions.length < options.count)) {
+        socket.emit('error', { error: `No se encontraron suficientes preguntas para este tema y dificultad. Genera preguntas nuevas antes de crear la partida. (${questions.length || 0}/${options.count || '?'} disponibles)` });
+        return;
+      }
+      // Mapear 'text' a 'question' para compatibilidad frontend
+      const mappedQuestions = questions.map(q => {
+        const { text, ...rest } = q;
+        return {
+          ...rest,
+          question: text
+        };
+      });
       const gameData = {
         hostId: options.hostId,
         isPublic: options.isPublic,
         status: 'waiting',
         players: [{ uid: options.hostId, displayName: options.displayName, score: 0 }],
-        questions: [],
-        currentQuestion: 0
+        questions: mappedQuestions,
+        currentQuestion: 0,
+        topic: options.topic || '',
+        difficulty: options.difficulty || 'medium'
       };
       await db.collection('games').doc(gameCode).set(gameData);
       socket.join(gameCode);
       socket.emit('gameCreated', { gameId: gameCode, ...gameData });
     } catch (error) {
+      console.error('Error general en createGame:', error);
       socket.emit('error', { error: error.message });
     }
   });
@@ -90,9 +137,15 @@ io.on('connection', (socket) => {
         socket.emit('error', { error: 'Game not found' });
         return;
       }
+      const game = gameDoc.data();
       // Fetch questions (optionally filter by category)
       let questionsQuery = db.collection('questions');
+      // Filtrar solo preguntas creadas por el usuario actual y las más recientes
       if (category) questionsQuery = questionsQuery.where('category', '==', category);
+      if (game && game.hostId) {
+        questionsQuery = questionsQuery.where('createdBy', '==', game.hostId);
+      }
+      questionsQuery = questionsQuery.orderBy('createdAt', 'desc').limit(10);
       const questionsSnap = await questionsQuery.get();
       const questions = questionsSnap.docs.map(doc => doc.data());
       await gameRef.update({ status: 'in-progress', questions });
@@ -181,7 +234,12 @@ async function sendQuestion(io, gameId, questionIndex) {
     await gameRef.update({ status: 'finished' });
     return;
   }
-  const question = game.questions[questionIndex];
+  let question = game.questions[questionIndex];
+  // Si por error viene 'text' pero no 'question', mapearlo
+  if (question && !question.question && question.text) {
+    const { text, ...rest } = question;
+    question = { ...rest, question: text };
+  }
   io.to(gameId).emit('newQuestion', { question, index: questionIndex });
 }
 

@@ -1,3 +1,21 @@
+// Bulk create questions
+exports.bulkCreate = async (req, res) => {
+  try {
+    const { questions } = req.body;
+    if (!Array.isArray(questions) || questions.length === 0) {
+      return res.status(400).json({ success: false, error: 'No questions provided' });
+    }
+    const batch = db.batch();
+    questions.forEach(q => {
+      const docRef = db.collection('questions').doc();
+      batch.set(docRef, q);
+    });
+    await batch.commit();
+    res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+};
 const { db } = require('../firebase');
 
 // Get all questions

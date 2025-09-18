@@ -41,3 +41,4 @@
 
 - .env frontend: `REACT_APP_API_URL`, `REACT_APP_SOCKET_URL`.
 - .env backend: `PORT`, `OPENAI_API_KEY` (opcional).
+

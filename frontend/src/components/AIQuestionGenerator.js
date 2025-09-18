@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../AuthContext';
+import { useNavigate } from 'react-router-dom';
 import './AIQuestionGenerator.css';
 
 const AIQuestionGenerator = ({ onQuestionsGenerated, onClose }) => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [topics, setTopics] = useState([]);
   const [difficultyLevels, setDifficultyLevels] = useState([]);
   const [selectedTopic, setSelectedTopic] = useState('');
@@ -10,6 +14,8 @@ const AIQuestionGenerator = ({ onQuestionsGenerated, onClose }) => {
   const [useAI, setUseAI] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [generatedQuestions, setGeneratedQuestions] = useState([]);
+  const [canCreateGame, setCanCreateGame] = useState(false);
 
   useEffect(() => {
     fetchTopics();
@@ -21,11 +27,18 @@ const AIQuestionGenerator = ({ onQuestionsGenerated, onClose }) => {
       const apiBase = process.env.REACT_APP_API_URL || 'http://localhost:5000';
       const response = await fetch(`${apiBase}/api/ai/topics`);
       const data = await response.json();
-      if (data.success) {
+      if (data.success && Array.isArray(data.topics) && data.topics.length > 0) {
         setTopics(data.topics);
         setSelectedTopic(data.topics[0]);
+      } else {
+        setTopics([]);
+        setSelectedTopic('');
+        setError('No hay temas disponibles. Contacta al administrador.');
       }
     } catch (error) {
+      setTopics([]);
+      setSelectedTopic('');
+      setError('Error obteniendo temas. Verifica tu conexión.');
       console.error('Error fetching topics:', error);
     }
   };
@@ -45,7 +58,7 @@ const AIQuestionGenerator = ({ onQuestionsGenerated, onClose }) => {
 
   const generateQuestions = async () => {
     if (!selectedTopic) {
-      setError('Por favor selecciona un tema');
+      setError('Por favor selecciona un tema válido');
       return;
     }
 
@@ -68,12 +81,47 @@ const AIQuestionGenerator = ({ onQuestionsGenerated, onClose }) => {
       });
 
       const data = await response.json();
-      
+      console.log('Respuesta de /api/ai/generate-questions:', data);
       if (data.success) {
+        // Guardar preguntas en Firestore y esperar confirmación exitosa antes de crear la partida
+        const apiBase = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+        const questionsWithMeta = data.questions.map(q => ({
+          ...q,
+          createdBy: user?.uid || 'anon',
+          createdAt: Date.now(),
+          category: selectedTopic,
+          difficulty: selectedDifficulty
+        }));
+        let saveOk = false;
+        try {
+          const response = await fetch(`${apiBase}/api/questions/bulk`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ questions: questionsWithMeta })
+          });
+          const result = await response.json();
+          if (!result.success) {
+            setError((prev) => (prev ? prev + ' | ' : '') + (result.error || 'Error guardando preguntas en Firestore'));
+            console.error('Error guardando preguntas en Firestore:', result.error);
+          } else {
+            saveOk = true;
+          }
+        } catch (e) {
+          setError((prev) => (prev ? prev + ' | ' : '') + 'Error guardando preguntas en Firestore');
+          console.error('Error guardando preguntas en Firestore:', e);
+        }
+        if (!saveOk) {
+          setLoading(false);
+          return;
+        }
+        // Redirigir al usuario a la pantalla principal para que pueda crear la partida manualmente
         onQuestionsGenerated(data.questions);
-        onClose();
+        setLoading(false);
+        navigate('/dashboard');
+        onClose && onClose();
       } else {
         setError(data.error || 'Error generando preguntas');
+        console.error('Error generando preguntas:', data.error);
       }
     } catch (error) {
       setError('Error de conexión. Intenta nuevamente.');
@@ -98,10 +146,15 @@ const AIQuestionGenerator = ({ onQuestionsGenerated, onClose }) => {
               value={selectedTopic} 
               onChange={(e) => setSelectedTopic(e.target.value)}
               className="form-select"
+              disabled={topics.length === 0}
             >
-              {topics.map(topic => (
-                <option key={topic} value={topic}>{topic}</option>
-              ))}
+              {topics.length === 0 ? (
+                <option value="">No hay temas disponibles</option>
+              ) : (
+                topics.map(topic => (
+                  <option key={topic} value={topic}>{topic}</option>
+                ))
+              )}
             </select>
           </div>
 
@@ -160,7 +213,7 @@ const AIQuestionGenerator = ({ onQuestionsGenerated, onClose }) => {
             <button 
               className="btn btn-primary" 
               onClick={generateQuestions}
-              disabled={loading}
+              disabled={loading || topics.length === 0}
             >
               {loading ? 'Generando...' : 'Generar Preguntas'}
             </button>

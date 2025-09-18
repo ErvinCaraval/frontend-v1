@@ -17,26 +17,8 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Try to initialize auth, fallback to mock if it fails
-let auth, db;
-let useFirebase = true;
-
-try {
-  auth = getAuth(app);
-  db = getFirestore(app);
-  console.log('✅ Firebase initialized successfully');
-} catch (error) {
-  console.log('⚠️ Firebase initialization failed, using mock services');
-  console.log('Error:', error.message);
-  useFirebase = false;
-  
-  // Import mock services
-  const mockAuth = require('./mockAuth').default;
-  const mockDb = require('./mockDb').default;
-  
-  auth = mockAuth;
-  db = mockDb;
-}
-
-export { auth, db, useFirebase };
+// Usar siempre Firebase real
+const auth = getAuth(app);
+const db = getFirestore(app);
+export { auth, db };
 
