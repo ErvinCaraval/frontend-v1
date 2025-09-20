@@ -23,56 +23,83 @@ export default function GamePage() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Solicitar la primera pregunta al conectar
+    if (user && gameId) {
+      socket.emit('requestQuestion', { gameId });
+      console.log('[GamePage] Emitiendo requestQuestion:', { gameId });
+    }
     // Si no llega pregunta en 5 segundos, mostrar error
     const timeout = setTimeout(() => {
       if (!question) setQuestionTimeout(true);
     }, 5000);
 
     if (!user) return;
-    socket.connect();
-    
-    socket.on('newQuestion', ({ question, index }) => {
-      console.log('Pregunta recibida:', question);
-      setQuestion(question);
-      setQuestionIndex(index);
-      setSelected(null);
-      setShowResult(false);
-      setTimeLeft(10);
-      setTimerKey(prev => prev + 1);
-    });
-    
-    socket.on('answerResult', ({ correctAnswerIndex, explanation, players }) => {
+    if (!socket.connected) {
+      console.log('[GamePage] Intentando conectar socket...');
+      socket.connect();
+    }
+    // Listeners nombrados para evitar duplicados
+    function onConnect() {
+      console.log('[GamePage] Socket conectado:', socket.id);
+    }
+    function onNewQuestion({ question, index }) {
+      console.log('[GamePage] Evento newQuestion recibido:', question);
+        // Asegurarse de que las opciones no se barajen ni modifiquen
+        // y que el índice de la respuesta correcta corresponda al array recibido
+        if (!Array.isArray(question.options)) {
+          question.options = [];
+        }
+        setQuestion({
+          ...question,
+          options: [...question.options], // Copia directa, sin barajar
+        });
+        setQuestionIndex(index);
+        setSelected(null);
+        setShowResult(false);
+        setTimeLeft(10);
+        setTimerKey(prev => prev + 1);
+    }
+    function onAnswerResult({ correctAnswerIndex, explanation, players }) {
+      console.log('[GamePage] Evento answerResult recibido:', { correctAnswerIndex, explanation, players });
       setShowResult(true);
       setResult({ correctAnswerIndex, explanation });
       setPlayers(players);
-    });
-    
-    socket.on('gameFinished', ({ players }) => {
+    }
+    function onGameFinished({ players }) {
+      console.log('[GamePage] Evento gameFinished recibido:', players);
       navigate(`/summary/${gameId}`, { state: { players } });
-    });
-    
-    socket.on('gameStarted', ({ questionsCount }) => {
+    }
+    function onGameStarted({ questionsCount }) {
+      console.log('[GamePage] Evento gameStarted recibido:', questionsCount);
       setTotalQuestions(questionsCount);
-    });
+    }
+
+    socket.on('connect', onConnect);
+    socket.on('newQuestion', onNewQuestion);
+    socket.on('answerResult', onAnswerResult);
+    socket.on('gameFinished', onGameFinished);
+    socket.on('gameStarted', onGameStarted);
 
     return () => {
-      socket.off('newQuestion');
-      socket.off('answerResult');
-      socket.off('gameFinished');
-      socket.off('gameStarted');
-      socket.disconnect();
+      socket.off('connect', onConnect);
+      socket.off('newQuestion', onNewQuestion);
+      socket.off('answerResult', onAnswerResult);
+      socket.off('gameFinished', onGameFinished);
+      socket.off('gameStarted', onGameStarted);
     };
   }, [user, gameId, navigate]);
 
   const handleSelect = useCallback((idx) => {
-    if (selected !== null) return; // Prevent multiple selections
-    setSelected(idx);
-    socket.emit('submitAnswer', { gameId, uid: user.uid, answerIndex: idx });
+  if (selected !== null) return; // Prevent multiple selections
+  setSelected(idx);
+  // Enviar también el valor de la opción seleccionada
+  const answerValue = question && Array.isArray(question.options) ? question.options[idx] : undefined;
+  socket.emit('submitAnswer', { gameId, uid: user.uid, answerIndex: idx, answerValue });
   }, [gameId, user, selected]);
 
   const handleTimerEnd = useCallback(() => {
     if (selected === null) {
-      socket.emit('submitAnswer', { gameId, uid: user.uid, answerIndex: null });
+      socket.emit('submitAnswer', { gameId, uid: user.uid, answerIndex: null, answerValue: null });
     }
   }, [gameId, user, selected]);
 

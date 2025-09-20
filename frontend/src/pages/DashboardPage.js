@@ -13,6 +13,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [showAIGenerator, setShowAIGenerator] = useState(false);
   const [selectedTopic, setSelectedTopic] = useState('');
+  const [generatedQuestions, setGeneratedQuestions] = useState([]);
 
   useEffect(() => {
     fetchPublicGames();
@@ -36,6 +37,10 @@ export default function DashboardPage() {
       alert('Por favor selecciona un tema antes de crear la partida.');
       return;
     }
+    if (!generatedQuestions.length) {
+      alert('Primero debes generar preguntas con IA antes de crear la partida.');
+      return;
+    }
     setLoading(true);
     socket.connect();
     // Obtener el token de autenticación del usuario
@@ -48,10 +53,13 @@ export default function DashboardPage() {
       displayName: user.displayName || user.email,
       isPublic: true,
       token,
-      topic: selectedTopic
+      topic: selectedTopic,
+      questions: generatedQuestions,
+      count: generatedQuestions.length
     });
-    socket.on('gameCreated', ({ gameId }) => {
+    socket.on('gameCreated', ({ gameId, questions }) => {
       setLoading(false);
+      alert(`¡Partida creada con ${questions?.length || 0} preguntas!`);
       navigate(`/lobby/${gameId}`);
     });
     socket.on('error', ({ error }) => {
@@ -74,6 +82,7 @@ export default function DashboardPage() {
 
   const handleQuestionsGenerated = (questions) => {
     console.log('Preguntas generadas:', questions);
+    setGeneratedQuestions(questions);
     // Bloquear el cambio de tema y usar el último tema generado
     if (questions && questions.length > 0 && questions[0].category) {
       setSelectedTopic(questions[0].category);
@@ -173,7 +182,10 @@ export default function DashboardPage() {
 
       {showAIGenerator && (
         <AIQuestionGenerator
-          onQuestionsGenerated={handleQuestionsGenerated}
+          onQuestionsGenerated={qs => {
+            handleQuestionsGenerated(qs);
+            setShowAIGenerator(false);
+          }}
           onClose={() => setShowAIGenerator(false)}
         />
       )}

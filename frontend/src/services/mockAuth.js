@@ -1,8 +1,8 @@
 // Mock authentication service for testing without Firebase
 class MockAuth {
   constructor() {
-    this.currentUser = null;
     this.listeners = [];
+    this.currentUser = this.getUserFromStorage();
   }
 
   // Mock sign in
@@ -16,6 +16,7 @@ class MockAuth {
             displayName: email.split('@')[0],
             emailVerified: true
           };
+          this.saveUserToStorage(this.currentUser);
           this.notifyListeners();
           resolve({ user: this.currentUser });
         } else {
@@ -36,6 +37,7 @@ class MockAuth {
             displayName: email.split('@')[0],
             emailVerified: true
           };
+          this.saveUserToStorage(this.currentUser);
           this.notifyListeners();
           resolve({ user: this.currentUser });
         } else {
@@ -63,10 +65,32 @@ class MockAuth {
     return new Promise((resolve) => {
       setTimeout(() => {
         this.currentUser = null;
+        this.saveUserToStorage(null);
         this.notifyListeners();
         resolve();
       }, 200);
     });
+  }
+  // Guardar usuario en localStorage
+  saveUserToStorage(user) {
+    if (user) {
+      window.localStorage.setItem('mockAuthUser', JSON.stringify(user));
+    } else {
+      window.localStorage.removeItem('mockAuthUser');
+    }
+  }
+
+  // Leer usuario de localStorage
+  getUserFromStorage() {
+    const userStr = window.localStorage.getItem('mockAuthUser');
+    if (userStr) {
+      try {
+        return JSON.parse(userStr);
+      } catch {
+        return null;
+      }
+    }
+    return null;
   }
 
   // Mock auth state listener

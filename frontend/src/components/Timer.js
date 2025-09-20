@@ -1,23 +1,28 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import './Timer.css';
 
-export default function Timer({ seconds, onEnd, onTick }) {
+export default function Timer({ seconds = 20, onEnd, onTick }) {
   const [time, setTime] = useState(seconds);
+  const intervalRef = useRef();
+
+  useEffect(() => {
+    setTime(seconds);
+  }, [seconds]);
 
   useEffect(() => {
     if (time === 0) {
-      onEnd();
+      if (onEnd) onEnd();
       return;
     }
-    const interval = setInterval(() => {
-      setTime(t => {
-        const newTime = t - 1;
-        if (onTick) onTick(newTime);
-        return newTime;
-      });
+    intervalRef.current = setInterval(() => {
+      setTime(t => t - 1);
     }, 1000);
-    return () => clearInterval(interval);
-  }, [time, onEnd, onTick]);
+    return () => clearInterval(intervalRef.current);
+  }, [time, onEnd]);
+
+  useEffect(() => {
+    if (onTick) onTick(time);
+  }, [time, onTick]);
 
   const getTimerColor = () => {
     if (time <= 3) return 'critical';
@@ -30,7 +35,7 @@ export default function Timer({ seconds, onEnd, onTick }) {
       <div className="timer-circle">
         <span className="timer-text">{time}</span>
       </div>
-      <span className="timer-label">seconds left</span>
+      <span className="timer-label">segundos restantes</span>
     </div>
   );
 }
